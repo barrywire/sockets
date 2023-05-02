@@ -44,6 +44,22 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    // Check if file is empty and write header line
+    file = fopen("registrations.txt", "r");
+    if (file == NULL)
+    {
+        perror("File open failed");
+        return 1;
+    }
+
+    fseek(file, 0, SEEK_END);
+    if (ftell(file) == 0)
+    {
+        fprintf(file, "Serial Number\tRegistration Number\tFirst Name\tLast Name\n");
+    }
+
+    fclose(file);
+
     // Receive data from clients and save to file
     while (1)
     {
@@ -81,32 +97,13 @@ int main(int argc, char *argv[])
         {
             if (strcmp(reg_number, students[i].reg_number) == 0 || serial_number == students[i].serial_number)
             {
-                sprintf(buffer, "Error: Registration number or serial number already exists\n");
-                sendto(server_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&client_address, sizeof(client_address));
+                printf("Registration failed: Student already registered or serial number already taken\n");
                 break;
             }
         }
-
-        file = fopen("registrations.txt", "r");
-        if (file == NULL)
-        {
-            perror("File open failed");
-            continue;
-        }
-        else
-        {
-            fseek(file, 0, SEEK_END);
-            long size = ftell(file);
-            if (size == 0)
-            {
-                fprintf(file, "Serial Number\tRegistration Number\tNames\n");
-            }
-            fclose(file);
-        }
-
         if (i == student_count)
         {
-            // Save data to file
+            // Save student data to file
             file = fopen("registrations.txt", "a");
             if (file == NULL)
             {
@@ -114,22 +111,37 @@ int main(int argc, char *argv[])
                 continue;
             }
 
-            fprintf(file, "%d\t%s\t%s %s\n", serial_number, reg_number, first_name, last_name);
+            fprintf(file, "%d\t\t\t\t%s\t\t\t%s\t%s\n", serial_number, reg_number, first_name, last_name);
             fclose(file);
 
-            // Save data to memory
+            // Save student data to array
             students[student_count].serial_number = serial_number;
             strcpy(students[student_count].reg_number, reg_number);
             strcpy(students[student_count].first_name, first_name);
             strcpy(students[student_count].last_name, last_name);
+
             student_count++;
 
-            sprintf(buffer, "Registration successful\n");
-            sendto(server_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&client_address, sizeof(client_address));
+            printf("Registration successful\n");
+        }
+
+        // Send response to client
+        char response[BUFFER_SIZE];
+        if (i == student_count - 1)
+        {
+            strcpy(response, "Registration successful");
+        }
+        else
+        {
+            strcpy(response, "Registration failed");
+        }
+
+        if (sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)&client_address, address_length) < 0)
+        {
+            perror("Send failed");
         }
     }
 
-    // Close socket
     close(server_socket);
 
     return 0;
