@@ -29,8 +29,12 @@ int main(int argc, char *argv[])
     server_socket = socket(AF_INET, SOCK_DGRAM, 0);
     if (server_socket == -1)
     {
-        printf("Could not create socket\n");
+        printf("ERROR: (Server) Could not create socket\n");
         return 1;
+    }
+    else
+    {
+        printf("INFO: (Server) Created a socket successfully - %d\n", server_socket);
     }
 
     // Bind socket to port
@@ -41,7 +45,12 @@ int main(int argc, char *argv[])
     if (bind(server_socket, (struct sockaddr *)&server_address, sizeof(server_address)) < 0)
     {
         perror("Bind failed");
+        printf("ERROR: (Server) Could not bind socket to port\n");
         return 1;
+    }
+    else
+    {
+        printf("INFO: (Server) Socket bound to port %d\n", ntohs(server_address.sin_port));
     }
 
     // Check if file is empty and write header line
@@ -49,7 +58,12 @@ int main(int argc, char *argv[])
     if (file == NULL)
     {
         perror("File open failed");
+        printf("ERROR: (Server) Could not open file for comparison of registration and serial numbers\n");
         return 1;
+    }
+    else
+    {
+        printf("INFO: (Server) Opened file successfully for comparison of registration and serial numbers\n");
     }
 
     fseek(file, 0, SEEK_END);
@@ -73,11 +87,15 @@ int main(int argc, char *argv[])
         if (recv_size < 0)
         {
             perror("Receive failed");
+            printf("ERROR: (Server) Could not receive data from client\n");
             continue;
         }
+        else
+        {
+            printf("INFO: (Server) Received data from %s:%d\n", inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
+        }
 
-        printf("Received data from %s:%d\n", inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
-        printf("Data: %s\n", buffer);
+        printf("INFO: (Server) Data received from %s:%d: %s\n", inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port), buffer);
 
         // Parse data and check for uniqueness
         char *token = strtok(buffer, ",");
@@ -97,7 +115,7 @@ int main(int argc, char *argv[])
         {
             if (strcmp(reg_number, students[i].reg_number) == 0 || serial_number == students[i].serial_number)
             {
-                printf("Registration failed: Student already registered or serial number already taken\n");
+                printf("ERROR: (Server) Registration failed: Student already registered or serial number already taken\n");
                 break;
             }
         }
@@ -108,6 +126,7 @@ int main(int argc, char *argv[])
             if (file == NULL)
             {
                 perror("File open failed");
+                printf("ERROR: (Server) Could not open file to save the data to file\n");
                 continue;
             }
 
@@ -122,23 +141,24 @@ int main(int argc, char *argv[])
 
             student_count++;
 
-            printf("Registration successful\n");
+            printf("INFO: (Server) Registration successful\n");
         }
 
         // Send response to client
         char response[BUFFER_SIZE];
         if (i == student_count - 1)
         {
-            strcpy(response, "Registration successful");
+            strcpy(response, "INFO: (Server) Registration successful");
         }
         else
         {
-            strcpy(response, "Registration failed");
+            strcpy(response, "ERROR: (Server) Registration failed");
         }
 
         if (sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)&client_address, address_length) < 0)
         {
             perror("Send failed");
+            printf("ERROR: (Server) Could not send response to client %s:%d\n", inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
         }
     }
 
