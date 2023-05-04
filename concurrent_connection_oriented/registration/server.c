@@ -1,151 +1,191 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <pthread.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 
-#define PORT 8080
-#define MAX_CONNECTIONS 5
+#define SERVER_PORT 5000
+#define MAX_STUDENTS 100
 
-typedef struct student
+struct student
 {
     int serial_number;
     char reg_number[20];
     char first_name[50];
     char last_name[50];
-} student;
+};
 
-student students[MAX_CONNECTIONS];
-int num_students = 0;
-
-pthread_mutex_t mutex;
-
-void add_student(char *reg_number, char *first_name, char *last_name)
+void *client_handler(void *arg)
 {
-    pthread_mutex_lock(&mutex);
-    num_students++;
-    students[num_students - 1].serial_number = num_students;
-    strcpy(students[num_students - 1].reg_number, reg_number);
-    strcpy(students[num_students - 1].first_name, first_name);
-    strcpy(students[num_students - 1].last_name, last_name);
-    pthread_mutex_unlock(&mutex);
-}
+    int client_socket = *((int *)arg);
 
-int check_unique(char *reg_number)
-{
-    for (int i = 0; i < num_students; i++)
+    struct student new_student;
+    recv(client_socket, (void *)&new_student, sizeof(new_student), 0);
+
+    // Read existing data from file
+    FILE *fp = fopen("registrations.txt", "r");
+    if (fp == NULL)
     {
-        if (strcmp(students[i].reg_number, reg_number) == 0)
-        {
-            return 0;
-        }
-    }
-    return 1;
-}
-
-void save_students()
-{
-    FILE *fp = fopen("registrations.txt", "w");
-    fprintf(fp, "Serial Number\tRegistration Number\tNames\n");
-    for (int i = 0; i < num_students; i++)
-    {
-        fprintf(fp, "%d\t%s\t%s %s\n", students[i].serial_number, students[i].reg_number, students[i].first_name, students[i].last_name);
-    }
-    fclose(fp);
-}
-
-void *handle_connection(void *socket_ptr)
-{
-    int socket = *((int *)socket_ptr);
-    char buffer[1024] = {0};
-    char response[1024] = {0};
-    int valread;
-
-    valread = recv(socket, buffer, 1024, 0);
-    buffer[valread] = '\0';
-    printf("Received data: %s\n", buffer);
-
-    char *reg_number = strtok(buffer, ",");
-    char *first_name = strtok(NULL, ",");
-    char *last_name = strtok(NULL, ",");
-
-    int unique_reg = check_unique(reg_number);
-    if (unique_reg)
-    {
-        add_student(reg_number, first_name, last_name);
-        save_students();
-        strcpy(response, "Registration successful.");
+        perror("Error opening file");
+        printf("ERROR: (Server) Failed to open file in read mode\n");
+        exit(EXIT_FAILURE);
     }
     else
     {
-        strcpy(response, "Registration failed. Registration number already exists.");
+        printf("INFO: (Server) File opened in read mode\n");
     }
 
-    send(socket, response, strlen(response), 0);
-    close(socket);
+    fseek(fp, 0, SEEK_END);
+    if (ftell(fp) == 0)
+    {
+        fprintf(fp, "Serial Number\tRegistration Number\tFirst Name\tLast Name\n");
+    }
 
+    struct student students[MAX_STUDENTS];
+    int num_students = 0;
+
+    while (fread(&students[num_students], sizeof(struct student), 1, fp))
+    {
+        num_students++;
+    }
+
+    fclose(fp);
+
+    // Check if student already exists
+    int i, student_exists = 0;
+    for (i = 0; i < num_students; i++)
+    {
+        if (new_student.serial_number == students[i].serial_number)
+        {
+            student_exists = 1;
+            break;
+        }
+
+        if (strcmp(new_student.reg_number, students[i].reg_number) == 0)
+        {
+            student_exists = 1;
+            break;
+        }
+    }
+
+    // If student does not exist, add to array and file
+    if (!student_exists)
+    {
+        // Add new student to array
+        students[num_students] = new_student;
+        num_students++;
+
+        // Write updated data to file
+        fp = fopen("registrations.txt", "a+");
+        if (fp == NULL)
+        {
+            perror("Error opening file");
+            printf("ERROR: (Server) Failed to open file in append mode\n");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            printf("INFO: (Server) File opened in append mode to write the data\n");
+        }
+
+        for (int i = 0; i < num_students; i++)
+        {
+            fprintf(fp, "%d\t\t\t\t%s\t\t\t%s\t%s\n", students[i].serial_number, students[i].reg_number, students[i].first_name, students[i].last_name);
+        }
+
+        fclose(fp);
+
+        // Send success message
+        char success_message[] = "INFO: (Server) Registration successful!";
+        send(client_socket, success_message, strlen(success_message), 0);
+    }
+    else
+    {
+        // Send error message
+        char error_message[] = "ERROR: (Server) Registration failed: Serial number or registration number already exists!";
+        send(client_socket, error_message, strlen(error_message), 0);
+    }
+
+    printf("INFO: (Server) Client disconnected\n");
+
+    close(client_socket);
     pthread_exit(NULL);
 }
 
-int main(int argc, char *argv[])
+int main()
 {
-    int server_fd, new_socket, valread;
-    struct sockaddr_in address;
-    int opt = 1;
-    int addrlen = sizeof(address);
-
-    // Creating socket file descriptor
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+    int server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket == -1)
     {
-        perror("socket failed");
+        perror("Error creating socket");
+        printf("ERROR: (Server) Failed to create socket\n");
         exit(EXIT_FAILURE);
     }
-
-    // Set socket options to reuse address and port
-    // if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)))
+    else
     {
-        perror("setsockopt");
-        exit(EXIT_FAILURE);
+        printf("INFO: (Server) Socket created successfully - %d\n", server_socket);
     }
 
-    // Configure server address
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(PORT);
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(SERVER_PORT);
 
-    // Bind server socket to the address
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
+    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
     {
-        perror("bind failed");
+        perror("Error binding socket");
+        printf("ERROR: (Server) Failed to bind socket\n");
         exit(EXIT_FAILURE);
     }
-
-    // Listen for incoming connections
-    if (listen(server_fd, 3) < 0)
+    else
     {
-        perror("listen");
-        exit(EXIT_FAILURE);
+        printf("INFO: (Server) Socket bound successfully\n");
     }
 
-    // Accept incoming connections and create new thread to handle each connection
+    if (listen(server_socket, 5) < 0)
+    {
+        perror("Error listening on socket");
+        printf("ERROR: (Server) Failed to listen on socket\n");
+        exit(EXIT_FAILURE);
+    }
+    else
+    {
+        printf("INFO: (Server) Socket listening successfully\n");
+    }
+
+    printf("Server started. Listening on port %d\n", SERVER_PORT);
+
     while (1)
     {
-        if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
+        int client_socket = accept(server_socket, NULL, NULL);
+        if (client_socket < 0)
         {
-            perror("accept");
-            exit(EXIT_FAILURE);
+            perror("Error accepting client connection");
+            printf("ERROR: (Server) Failed to accept client connection\n");
+            continue;
+        }
+        else
+        {
+            printf("INFO: (Server) Client connected\n");
         }
 
-        pthread_t thread_id;
-        if (pthread_create(&thread_id, NULL, handle_connection, (void *)&new_socket) < 0)
+        pthread_t tid;
+        if (pthread_create(&tid, NULL, client_handler, (void *)&client_socket) != 0)
         {
-            perror("could not create thread");
-            exit(EXIT_FAILURE);
+            perror("Error creating thread");
+            printf("ERROR: (Server) Failed to create thread\n");
+            continue;
         }
+        else
+        {
+            printf("INFO: (Server) Thread created successfully\n");
+        }
+
+        printf("New client connected. Thread created with ID: %ld\n", tid);
     }
 
+    close(server_socket);
     return 0;
 }
