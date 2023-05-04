@@ -1,13 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <pthread.h>
 
-#define MAX_CLIENTS 10
-#define BUFFER_SIZE 1024
+#define SERVER_PORT 5000
+#define MAX_STUDENTS 100
 
 struct student
 {
@@ -17,169 +17,165 @@ struct student
     char last_name[50];
 };
 
-void *handle_packet(void *arg);
-
-int main(int argc, char *argv[])
+void *client_handler(void *arg)
 {
-    int server_socket, client_socket, address_length, recv_size;
-    struct sockaddr_in server_address, client_address;
-    char buffer[BUFFER_SIZE];
-    struct student students[MAX_CLIENTS];
-    int student_count = 0;
-    FILE *file;
+    int server_socket = *((int *)arg);
 
-    // Create socket
-    server_socket = socket(AF_INET, SOCK_DGRAM, 0);
-    if (server_socket == -1)
+    struct student new_student;
+    struct sockaddr_in client_addr;
+    socklen_t client_addr_len = sizeof(client_addr);
+    recvfrom(server_socket, (void *)&new_student, sizeof(new_student), 0, (struct sockaddr *)&client_addr, &client_addr_len);
+
+    // Read existing data from file
+    FILE *fp = fopen("registrations.txt", "r");
+    if (fp == NULL)
     {
-        printf("ERROR: (Server) Could not create socket\n");
-        return 1;
+        perror("Error opening file");
+        printf("ERROR: (Server) Failed to open file in read mode\n");
+        exit(EXIT_FAILURE);
     }
     else
     {
-        printf("INFO: (Server) Created a socket successfully - %d\n", server_socket);
+        printf("INFO: (Server) File opened in read mode\n");
+    }
+
+    fseek(fp, 0, SEEK_END);
+    if (ftell(fp) == 0)
+    {
+        fprintf(fp, "Serial Number\tRegistration Number\tFirst Name\tLast Name\n");
+    }
+
+    struct student students[MAX_STUDENTS];
+    int num_students = 0;
+
+    while (fread(&students[num_students], sizeof(struct student), 1, fp))
+    {
+        num_students++;
+    }
+
+    fclose(fp);
+
+    // Check if student already exists
+    int i, student_exists = 0;
+    for (i = 0; i < num_students; i++)
+    {
+        if (new_student.serial_number == students[i].serial_number)
+        {
+            student_exists = 1;
+            break;
+        }
+
+        if (strcmp(new_student.reg_number, students[i].reg_number) == 0)
+        {
+            student_exists = 1;
+            break;
+        }
+    }
+
+    // If student does not exist, add to array and file
+    if (!student_exists)
+    {
+        // Add new student to array
+        students[num_students] = new_student;
+        num_students++;
+
+        // Write updated data to file
+        fp = fopen("registrations.txt", "a+");
+        if (fp == NULL)
+        {
+            perror("Error opening file");
+            printf("ERROR: (Server) Failed to open file in append mode\n");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            printf("INFO: (Server) File opened in append mode to write the data\n");
+        }
+
+        for (int i = 0; i < num_students; i++)
+        {
+            fprintf(fp, "%d\t\t\t\t%s\t\t\t%s\t%s\n", students[i].serial_number, students[i].reg_number, students[i].first_name, students[i].last_name);
+        }
+
+        fclose(fp);
+
+        // Send success message
+        char success_message[] = "INFO: (Server) Registration successful!";
+        sendto(server_socket, success_message, strlen(success_message), 0, (struct sockaddr *)&client_addr, client_addr_len);
+    }
+    else
+    {
+        // Send error message
+        char error_message[] = "ERROR: (Server) Registration failed: Serial number or registration number already exists!";
+        sendto(server_socket, error_message, strlen(error_message), 0, (struct sockaddr *)&client_addr, client_addr_len);
+    }
+
+    printf("INFO: (Server) Client handler thread exiting...\n");
+
+    // Close socket
+    close(server_socket);
+
+    return NULL;
+}
+
+int main()
+{
+    // Create server socket
+    int server_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (server_socket < 0)
+    {
+        perror("Error creating socket");
+        printf("ERROR: (Server) Failed to create socket\n");
+        exit(EXIT_FAILURE);
+    }
+    else
+    {
+        printf("INFO: (Server) Socket created successfully\n");
     }
 
     // Bind socket to port
-    server_address.sin_family = AF_INET;
-    server_address.sin_addr.s_addr = INADDR_ANY;
-    server_address.sin_port = htons(8888);
-
-    if (bind(server_socket, (struct sockaddr *)&server_address, sizeof(server_address)) < 0)
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(SERVER_PORT);
+    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
     {
-        perror("Bind failed");
-        printf("ERROR: (Server) Could not bind socket to port\n");
-        return 1;
+        perror("Error binding socket");
+        printf("ERROR: (Server) Failed to bind socket to port %d\n", SERVER_PORT);
+        exit(EXIT_FAILURE);
     }
     else
     {
-        printf("INFO: (Server) Socket bound to port %d\n", ntohs(server_address.sin_port));
+        printf("INFO: (Server) Socket bound to port %d successfully\n", SERVER_PORT);
     }
 
-    // Check if file is empty and write header line
-    file = fopen("registrations.txt", "r");
-    if (file == NULL)
-    {
-        perror("File open failed");
-        printf("ERROR: (Server) Could not open file for comparison of registration and serial numbers\n");
-        return 1;
-    }
-    else
-    {
-        printf("INFO: (Server) Opened file successfully for comparison of registration and serial numbers\n");
-    }
+    // Listen for connections
+    printf("INFO: (Server) Listening for incoming connections...\n");
 
-    fseek(file, 0, SEEK_END);
-    if (ftell(file) == 0)
-    {
-        fprintf(file, "Serial Number\tRegistration Number\tFirst Name\tLast Name\n");
-    }
-
-    fclose(file);
-
-    // Receive data from clients and save to file
     while (1)
     {
-        printf("Waiting for client data...\n");
-
         // Receive data from client
-        address_length = sizeof(client_address);
-        memset(buffer, 0, BUFFER_SIZE);
-        recv_size = recvfrom(server_socket, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_address, &address_length);
+        struct student new_student;
+        struct sockaddr_in client_addr;
+        socklen_t client_addr_len = sizeof(client_addr);
+        recvfrom(server_socket, (void *)&new_student, sizeof(new_student), 0, (struct sockaddr *)&client_addr, &client_addr_len);
 
-        if (recv_size < 0)
+        // Create client handler thread
+        pthread_t thread_id;
+        if (pthread_create(&thread_id, NULL, client_handler, (void *)&server_socket) != 0)
         {
-            perror("Receive failed");
-            printf("ERROR: (Server) Could not receive data from client\n");
-            continue;
+            perror("Error creating thread");
+            printf("ERROR: (Server) Failed to create client handler thread\n");
+            exit(EXIT_FAILURE);
         }
         else
         {
-            printf("INFO: (Server) Received data from %s:%d\n", inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
+            printf("INFO: (Server) Client handler thread created successfully\n");
         }
 
-        printf("INFO: (Server) Data received from %s:%d: %s\n", inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port), buffer);
-
-        // Create a new thread to handle the packet
-        pthread_t tid;
-        int *new_sock = malloc(sizeof(int));
-        *new_sock = server_socket;
-        struct sockaddr_in *client = malloc(sizeof(struct sockaddr_in));
-        memcpy(client, &client_address, sizeof(client_address));
-        if (pthread_create(&tid, NULL, handle_packet, (void *)new_sock) < 0)
-        {
-            perror("Thread creation failed");
-            printf("ERROR: (Server) Could not create thread to handle packet\n");
-            continue;
-        }
-        else
-        {
-            printf("INFO: (Server) Created thread %lu to handle packet\n", tid);
-        }
+        // Detach thread
+        pthread_detach(thread_id);
     }
+
     return 0;
-}
-
-void *handle_packet(void *arg)
-{
-    int client_socket = *(int *)arg;
-    char buffer[BUFFER_SIZE];
-    int recv_size;
-
-    // Receive data from client
-    memset(buffer, 0, BUFFER_SIZE);
-    recv_size = recv(client_socket, buffer, BUFFER_SIZE, 0);
-
-    if (recv_size < 0)
-    {
-        perror("Receive failed");
-        printf("ERROR: (Server) Could not receive data from client\n");
-        return NULL;
-    }
-    else
-    {
-        printf("INFO: (Server) Received data from client: %s\n", buffer);
-    }
-
-    // Parse the comma-separated data received from the client
-    char *token;
-    struct student s;
-
-    token = strtok(buffer, ",");
-    s.serial_number = atoi(token);
-
-    token = strtok(NULL, ",");
-    strncpy(s.reg_number, token, sizeof(s.reg_number) - 1);
-
-    token = strtok(NULL, ",");
-    strncpy(s.first_name, token, sizeof(s.first_name) - 1);
-
-    token = strtok(NULL, ",");
-    strncpy(s.last_name, token, sizeof(s.last_name) - 1);
-
-    // Save the student data to file
-    FILE *file = fopen("registrations.txt", "a");
-    if (file == NULL)
-    {
-        perror("File open failed");
-        printf("ERROR: (Server) Could not open file for writing\n");
-        return NULL;
-    }
-
-    fprintf(file, "%d\t%s\t%s\t%s\n", s.serial_number, s.reg_number, s.first_name, s.last_name);
-    fclose(file);
-
-    // Send a response back to the client
-    char response[] = "Data received and saved to file.";
-    if (send(client_socket, response, strlen(response), 0) < 0)
-    {
-        perror("Send failed");
-        printf("ERROR: (Server) Could not send response to client\n");
-    }
-    else
-    {
-        printf("INFO: (Server) Response sent to client: %s\n", response);
-    }
-
-    return NULL;
 }

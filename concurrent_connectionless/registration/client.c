@@ -5,9 +5,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-#define SERVER_ADDRESS "127.0.0.1"
-#define SERVER_PORT 8888
-#define BUFFER_SIZE 1024
+#define SERVER_PORT 5000
 
 struct student
 {
@@ -19,49 +17,40 @@ struct student
 
 int main()
 {
-    int client_socket, recv_size;
-    struct sockaddr_in server_address;
-    char buffer[BUFFER_SIZE];
-    struct student student_info;
-
-    // Get student information from user
-    printf("Enter serial number: ");
-    scanf("%d", &student_info.serial_number);
-    printf("Enter registration number: ");
-    scanf("%s", student_info.reg_number);
-    printf("Enter first name: ");
-    scanf("%s", student_info.first_name);
-    printf("Enter last name: ");
-    scanf("%s", student_info.last_name);
-
     // Create socket
-    client_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    int client_socket = socket(AF_INET, SOCK_DGRAM, 0);
     if (client_socket == -1)
     {
-        printf("ERROR: (Client) Could not create socket\n");
-        return -1;
-    }
-    else
-    {
-        printf("INFO: (Client) Created a socket successfully - %d\n", client_socket);
+        perror("Error creating socket");
+        exit(EXIT_FAILURE);
     }
 
     // Set server address
-    server_address.sin_family = AF_INET;
-    server_address.sin_addr.s_addr = inet_addr(SERVER_ADDRESS);
-    server_address.sin_port = htons(SERVER_PORT);
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(SERVER_PORT);
+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-    // Send data to server
-    sprintf(buffer, "%d,%s,%s,%s", student_info.serial_number, student_info.reg_number, student_info.first_name, student_info.last_name);
-    if (sendto(client_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&server_address, sizeof(server_address)) < 0)
-    {
-        printf("ERROR: (Client) Failed to send data to server\n");
-        return -1;
-    }
-    else
-    {
-        printf("INFO: (Client) Data sent successfully to server\n");
-    }
+    // Read student data from user
+    struct student new_student;
+    printf("Enter serial number: ");
+    scanf("%d", &new_student.serial_number);
+    printf("Enter registration number: ");
+    scanf("%s", new_student.reg_number);
+    printf("Enter first name: ");
+    scanf("%s", new_student.first_name);
+    printf("Enter last name: ");
+    scanf("%s", new_student.last_name);
+
+    // Send student data to server
+    sendto(client_socket, (void *)&new_student, sizeof(new_student), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
+
+    // Receive response from server
+    char response[100];
+    socklen_t server_addr_len = sizeof(server_addr);
+    recvfrom(client_socket, response, sizeof(response), 0, (struct sockaddr *)&server_addr, &server_addr_len);
+    printf("%s\n", response);
 
     // Close socket
     close(client_socket);
