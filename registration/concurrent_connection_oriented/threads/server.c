@@ -17,10 +17,13 @@ struct student
     char last_name[50];
 };
 
+// Function to handle the clients 5 - 8
 void *client_handler(void *arg)
 {
+    // Get client socket
     int client_socket = *((int *)arg);
 
+    // 5. Read the data sent by client
     struct student new_student;
     recv(client_socket, (void *)&new_student, sizeof(new_student), 0);
 
@@ -43,6 +46,8 @@ void *client_handler(void *arg)
         fprintf(fp, "Serial Number\tRegistration Number\tFirst Name\tLast Name\n");
     }
 
+    // 6. Parse the data and check if student already exists
+    // 6.1 Create a new student struct
     struct student students[MAX_STUDENTS];
     int num_students = 0;
 
@@ -53,7 +58,7 @@ void *client_handler(void *arg)
 
     fclose(fp);
 
-    // Check if student already exists
+    // 6.2 Check if student already exists
     int i, student_exists = 0;
     for (i = 0; i < num_students; i++)
     {
@@ -70,14 +75,14 @@ void *client_handler(void *arg)
         }
     }
 
-    // If student does not exist, add to array and file
+    // 7. If student does not exist, add to array and file
     if (!student_exists)
     {
-        // Add new student to array
+        // 7.1 Add new student to array
         students[num_students] = new_student;
         num_students++;
 
-        // Write updated data to file
+        // 7.1 Write updated data to file
         fp = fopen("registrations.txt", "a+");
         if (fp == NULL)
         {
@@ -97,7 +102,7 @@ void *client_handler(void *arg)
 
         fclose(fp);
 
-        // Send success message
+        // 8. Send success message
         char success_message[] = "INFO: (Server) Registration successful!";
         send(client_socket, success_message, strlen(success_message), 0);
     }
@@ -116,6 +121,7 @@ void *client_handler(void *arg)
 
 int main()
 {
+    // 1. Create a socket for the server
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket == -1)
     {
@@ -133,6 +139,7 @@ int main()
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(SERVER_PORT);
 
+    // 2. Bind the socket to a specific port
     if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
     {
         perror("Error binding socket");
@@ -144,6 +151,7 @@ int main()
         printf("INFO: (Server) Socket bound successfully\n");
     }
 
+    // 3. Listen for incoming connections. Maximum 5 connections can be queued.
     if (listen(server_socket, 5) < 0)
     {
         perror("Error listening on socket");
@@ -159,6 +167,7 @@ int main()
 
     while (1)
     {
+        // 4. Accept incoming connection
         int client_socket = accept(server_socket, NULL, NULL);
         if (client_socket < 0)
         {
@@ -186,6 +195,7 @@ int main()
         printf("New client connected. Thread created with ID: %ld\n", tid);
     }
 
+    // 9. Close the connection.
     close(server_socket);
     return 0;
 }
