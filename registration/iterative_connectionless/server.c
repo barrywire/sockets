@@ -116,6 +116,10 @@ int main(int argc, char *argv[])
             if (strcmp(reg_number, students[i].reg_number) == 0 || serial_number == students[i].serial_number)
             {
                 printf("ERROR: (Server) Registration failed: Student already registered or serial number already taken\n");
+
+                // Send the response to the client
+                char response[BUFFER_SIZE];
+                strcpy(response, "ERROR: (Server) Registration failed: Student already registered or serial number already taken");
                 break;
             }
         }
