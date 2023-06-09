@@ -1,3 +1,3 @@
 Serial Number   Registration Number     Names
-0				P15/001/0001			Numero	Uno
-3				P15/1235/83455			Matteo	Luca
+1				P15/4897/2020			John	Kariuki
+2				P15/4898/2020			Mary	Gitau

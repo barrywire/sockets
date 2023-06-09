@@ -1,6 +1,7 @@
 Serial Number   Registration Number     Names
-1				P15/1910/2020			Barry	Wire
-2				P19/1910/2020			Barry	TheSecond
 
-4				P20/1810/2021			Barry	TheDourth
+
+1				P15/4897/2020			John	Kariuki
+
+2				P15/4898/2020			Mary	Gitau
 

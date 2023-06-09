@@ -1,10 +1,4 @@
 Serial Number   Registration Number     Names
-1	            P15/1910/2020	        Barry	Wire
-2	            P15/1919/2020	        WW	I
-3	            P15/1911/2020	        Bcew	Third
-4			    P15/1945/2020			Adolf	Warman
-5				P15/2022/2020			Vladmir	Putin
-6				H35/1910/2020			Someone	Doing
-7				H49/12344/1999			Someone	Old
 
-8				H19/2034/2022			Med	Student
+1				P15/4897/2020			John	Kamau
+2				P15/4898/2020			Mary	Gitau

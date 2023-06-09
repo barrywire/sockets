@@ -17,14 +17,18 @@ struct student
     char last_name[50];
 };
 
+// Function to handle the clients
 void *client_handler(void *arg)
 {
-    int server_socket = *((int *)arg);
+    // Get client socket
+    int client_socket = *((int *)arg);
 
+
+    // Read the data sent by the client
     struct student new_student;
     struct sockaddr_in client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
-    recvfrom(server_socket, (void *)&new_student, sizeof(new_student), 0, (struct sockaddr *)&client_addr, &client_addr_len);
+    recvfrom(client_socket, (void *)&new_student, sizeof(new_student), 0, (struct sockaddr *)&client_addr, &client_addr_len);
 
     // Read existing data from file
     FILE *fp = fopen("registrations.txt", "r");
@@ -45,10 +49,14 @@ void *client_handler(void *arg)
         fprintf(fp, "Serial Number\tRegistration Number\tFirst Name\tLast Name\n");
     }
 
+    rewind(fp);
+
+    // Parse the data and check if the student already exists
+    // Create a new array to store the data
     struct student students[MAX_STUDENTS];
     int num_students = 0;
 
-    while (fread(&students[num_students], sizeof(struct student), 1, fp))
+    while (fread(&students[num_students], sizeof(struct student), 1, fp) == 1)
     {
         num_students++;
     }
@@ -101,19 +109,19 @@ void *client_handler(void *arg)
 
         // Send success message
         char success_message[] = "INFO: (Server) Registration successful!";
-        sendto(server_socket, success_message, strlen(success_message), 0, (struct sockaddr *)&client_addr, client_addr_len);
+        sendto(client_socket, success_message, strlen(success_message), 0, (struct sockaddr *)&client_addr, client_addr_len);
     }
     else
     {
         // Send error message
         char error_message[] = "ERROR: (Server) Registration failed: Serial number or registration number already exists!";
-        sendto(server_socket, error_message, strlen(error_message), 0, (struct sockaddr *)&client_addr, client_addr_len);
+        sendto(client_socket, error_message, strlen(error_message), 0, (struct sockaddr *)&client_addr, client_addr_len);
     }
 
     printf("INFO: (Server) Client handler thread exiting...\n");
 
     // Close socket
-    close(server_socket);
+    close(client_socket);
 
     return NULL;
 }
