@@ -10,7 +10,6 @@
 
 struct Student
 {
-    /* Student Properties */
     int serialNumber;
     char regNumber[20];
     char firstName[50];
@@ -25,11 +24,16 @@ int main()
     char buffer[1024] = {0};
     struct Student student;
 
-    // Create socket file descriptor
+    // 1. Create client socket
     if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
     {
-        printf("\n Socket creation error \n");
+        perror("Socket creation error");
+        printf("ERROR: (Client)  Socket creation error \n");
         return -1;
+    }
+    else
+    {
+        printf("INFO: (Client) Socket created - %d\n", sock);
     }
 
     memset(&serv_addr, '0', sizeof(serv_addr));
@@ -46,7 +50,7 @@ int main()
 
     while (1)
     {
-        // Get the student's details from the user
+        // 2. Prompt user for their student data
         printf("Enter the student's details:\n");
         printf("Serial Number: ");
         scanf("%d", &student.serialNumber);
@@ -57,12 +61,22 @@ int main()
         printf("Last Name: ");
         scanf("%s", student.lastName);
 
-        // Send the student's details to the server
+        // 3. Send the student's details to the server
         sprintf(buffer, "%d %s %s %s", student.serialNumber, student.regNumber, student.firstName, student.lastName);
         sendto(sock, buffer, strlen(buffer), 0, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
-        printf("Student data sent successfully.\n");
+        if (errno)
+        {
+            perror("Error sending data");
+            printf("ERROR: (Client) Failed to send data\n");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            printf("INFO: (Client) Data sent to server successfully\n");
+        }
+        // printf("Student data sent successfully.\n");
 
-        // Receive the response from the server
+        // 4. Receive the response from the server
         int serv_addr_len = sizeof(serv_addr);
         valread = recvfrom(sock, buffer, 1024, 0, (struct sockaddr *)&serv_addr, &serv_addr_len);
         printf("%s\n", buffer);

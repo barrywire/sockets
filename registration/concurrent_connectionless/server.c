@@ -16,8 +16,8 @@ struct Student
 {
     int serialNumber;
     char regNumber[20];
-    char firstName[MAX_NAME_LENGTH];
-    char lastName[MAX_NAME_LENGTH];
+    char firstName[50];
+    char lastName[50];
 };
 
 int checkIfSerialNumberExists(int serialNumber)
@@ -71,8 +71,13 @@ int main()
     file = fopen(FILENAME, "a");
     if (file == NULL)
     {
-        printf("Error opening file.\n");
+        perror("Error opening file.\n");
+        printf("ERROR: (Server) Failed to open the file.\n");
         exit(1);
+    }
+    else
+    {
+        printf("INFO: (Server) File opened successfully.\n");
     }
 
     // Check if file is empty
@@ -89,10 +94,15 @@ int main()
     if ((server_fd = socket(AF_INET, SOCK_DGRAM, 0)) == 0)
     {
         perror("socket failed");
+        printf("ERROR: (Server) Failed to create socket.\n");
         exit(EXIT_FAILURE);
     }
+    else
+    {
+        printf("INFO: (Server) Socket created successfully.\n");
+    }
 
-    printf("Socket created successfully.\n");
+    // printf("Socket created successfully.\n");
 
     // Set address and port
     address.sin_family = AF_INET;
@@ -103,20 +113,30 @@ int main()
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
     {
         perror("bind failed");
+        printf("ERROR: (Server) Failed to bind socket.\n");
         exit(EXIT_FAILURE);
     }
+    else
+    {
+        printf("INFO: (Server) Socket binded to port %d.\n", PORT);
+    }
 
-    printf("Socket binded to port %d.\n", PORT);
+    // printf("Socket binded to port %d.\n", PORT);
 
     while (1)
     {
-        printf("Waiting for data...\n");
+        printf("INFO: (Server) Waiting for data...\n");
         // Receive data from the client
         memset(buffer, 0, BUFFER_SIZE);
         if (recvfrom(server_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&address, (socklen_t *)&addrlen) < 0)
         {
             perror("recvfrom failed");
+            printf("ERROR: (Server) Failed to receive data from client.\n");
             exit(EXIT_FAILURE);
+        }
+        else
+        {
+            printf("INFO: (Server) Data received from client: %s:%d\n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
         }
 
         // Fork a child process to handle the client request
@@ -125,6 +145,7 @@ int main()
         if (child_pid < 0)
         {
             perror("fork failed");
+            printf("ERROR: (Server) Failed to fork child process.\n");
             exit(EXIT_FAILURE);
         }
         else if (child_pid == 0)
@@ -133,7 +154,7 @@ int main()
             // Loop to keep reading data until client closes connection
             while (1)
             {
-                printf("Data received from client: %s\n", buffer);
+                printf("INFO: (Server) Data received from client: %s\n", buffer);
 
                 // Parse student data from incoming message
                 sscanf(buffer, "%d %s %s %s", &student.serialNumber, student.regNumber, student.firstName, student.lastName);
@@ -141,18 +162,18 @@ int main()
                 // Check if serial number or registration number already exists
                 if (checkIfSerialNumberExists(student.serialNumber))
                 {
-                    printf("Error: Student with the same serial number already exists.\n");
+                    printf("ERROR: (Server) Student with the same serial number already exists.\n");
                 }
                 else if (checkIfRegNumberExists(student.regNumber))
                 {
-                    printf("Error: Student with the same registration number already exists.\n");
+                    printf("ERROR: (Server) Student with the same registration number already exists.\n");
                 }
                 else
                 {
                     // Append new student data to file
                     fprintf(file, "%d\t\t\t\t\t\t %s\t\t\t\t\t\t %s %s\n", student.serialNumber, student.regNumber, student.firstName, student.lastName);
                     fflush(file);
-                    printf("Student Added Successfully\n");
+                    printf("ERROR: (Server) Student Added Successfully\n");
                     printf("\n");
                 }
 
@@ -163,7 +184,12 @@ int main()
                 if (recvfrom(server_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&address, (socklen_t *)&addrlen) < 0)
                 {
                     perror("recvfrom failed");
+                    printf("ERROR: (Server) Failed to receive data from client.\n");
                     exit(EXIT_FAILURE);
+                }
+                else
+                {
+                    printf("INFO: (Server) Data received from client: %s:%d\n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
                 }
             }
 
